@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, jsonify, abort
 from flask_sqlalchemy import SQLAlchemy
+import sys
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgres://cameron:postgres@localhost:5432/todoapp'
@@ -17,14 +18,28 @@ db.create_all()
 
 @app.route('/todos/create', methods=['POST'])
 def create_todo():
-    description = request.get_json()['description']
-    todo = Todo(description=description)
-    db.session.add(todo)
-    db.session.commit()
-    #index refers to name of route, not name of index.html
-    return jsonify({
-        'description': todo.description
-    })
+    error = False
+    body = {}
+    try:
+        description = request.get_json()['description']
+        todo = Todo(description=description)
+        db.session.add(todo)
+        db.session.commit()
+        body['description'] = todo.description
+    except:
+        error = True
+        db.session.rollback()
+        print(sys.exc_info())
+    finally:
+        db.session.close()
+    if error:
+        abort (400)
+    else:
+        #!cannot access todo object directly after closing the session
+        #!because it could have been modified since the session was closed
+        #!so we copied the description key to a blank object called body
+        #!this ensures we always know the state of the data before returning it
+        return jsonify(body)        
 
 @app.route('/')
 def index():
